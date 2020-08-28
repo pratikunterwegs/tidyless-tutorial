@@ -5,7 +5,8 @@ editor_options:
 
 # Reading files and string manipulation
 
-Instead of using `stringr`, we will use the `stringi` package on which it is based, and read files using the `data.table` package. In place of `glue`, we will use the `base` function `sprintf`.
+Instead of using `stringr`, we will use the `stringi` package on which it is based, and read files using the `data.table` package. 
+`glue` is great, simply use `glue`.
 
 ![](opening-image.png)
 
@@ -14,7 +15,7 @@ Load the packages for the day.
 
 ```{r load_packages_01}
 library(data.table)
-library(stringr)
+library(stringi)
 ```
 
 ## Data import and export with `data.table`
@@ -211,7 +212,7 @@ stri_endswith(fruit, fixed = "e", negate = TRUE)
 `stri_subset` [WHICH IS NOT RELATED TO `stri_sub`] helps with subsetting a character vector based on a `stri_detect` predicate.
 In the example, all elements containing "banana" are subset.
 
-`stri_which` has the same logic except that it returns the vector position and not the elements.
+`stri_which` does not exist so far as I can tell, but it's easily replicated.
 
 ```{r}
 # should return a subset vector containing the first two elements
@@ -220,11 +221,11 @@ stri_subset(c("banana",
               "applegeddon is not real"),
             fixed = "banana")
 
-# returns an integer vector
-stri_which(c("banana",
-             "bananageddon is coming",
-             "applegeddon is not real"),
-           fixed = "banana")
+# stri_which is easily replicated
+which(stri_detect(c("banana",
+                    "bananageddon is coming",
+                    "applegeddon is not real"),
+                  fixed = "banana"))
 ```
 
 ### Matching strings
@@ -235,10 +236,10 @@ The return type is a `list`, with one element per search pattern.
 A simple case is shown below where the search pattern is the phrase "banana".
 
 ```{r}
-stri_match(string = c("banana",
-                     "bananageddon",
-                     "bananas are bad"),
-          pattern = "banana")
+stri_match(str = c("banana",
+                   "bananageddon",
+                   "bananas are bad"),
+           regex = "banana")
 ```
 
 The search pattern can be extended to look for multiple subsets of the search pattern. Consider searching for dates and times.
@@ -249,16 +250,16 @@ The return type is a list, each element is a character matrix where the first co
 
 ```{r}
 # first with [-.] treated simply as a separator
-stri_match(string = c("1970-somemonth-01",
-                     "1990-anothermonth-01",
-                     "2010-thismonth-01"),
-          pattern = "(\\d{4})[-.](\\w+)")
+stri_match(str = c("1970-somemonth-01",
+                   "1990-anothermonth-01",
+                   "2010-thismonth-01"),
+           regex = "(\\d{4})[-.](\\w+)")
 
 # then with [-.] actively searched for
-stri_match(string = c("1970-somemonth-01",
-                     "1990-anothermonth-01",
-                     "2010-thismonth-01"),
-          pattern = "(\\d{4})([-.])(\\w+)")
+stri_match(str = c("1970-somemonth-01",
+                   "1990-anothermonth-01",
+                   "2010-thismonth-01"),
+          regex = "(\\d{4})([-.])(\\w+)")
 ```
 
 Multiple possible matches are dealt with using `stri_match_all`. An example case is uncertainty in date-time in raw data, where the date has been entered as `1970-somemonth-01 or 1970/anothermonth/01`.
@@ -267,13 +268,13 @@ The return type is a list, with one element per input string. Each element is a 
 
 ```{r}
 # first with a single date entry
-stri_match_all(string = c("1970-somemonth-01 or maybe 1990/anothermonth/01"),
-              pattern = "(\\d{4})[\\-\\/]([a-z]+)")
+stri_match_all(str = c("1970-somemonth-01 or maybe 1990/anothermonth/01"),
+              regex = "(\\d{4})[\\-\\/]([a-z]+)")
 
 # then with multiple date entries
-stri_match_all(string = c("1970-somemonth-01 or maybe 1990/anothermonth/01",
+stri_match_all(str = c("1970-somemonth-01 or maybe 1990/anothermonth/01",
                          "1990-somemonth-01 or maybe 2001/anothermonth/01"),
-              pattern = "(\\d{4})[\\-\\/]([a-z]+)")
+               regex = "(\\d{4})[\\-\\/]([a-z]+)")
 ```
 
 ### Simpler pattern extraction
@@ -284,14 +285,14 @@ The full functionality of `stri_match_*` can be boiled down to the most common u
 
 ```{r}
 # extracting the first full match using stri_extract
-stri_extract(string = c("1970-somemonth-01 or maybe 1990/anothermonth/01",
+stri_extract(str = c("1970-somemonth-01 or maybe 1990/anothermonth/01",
                        "1990-somemonth-01 or maybe 2001/anothermonth/01"),
-            pattern = "(\\d{4})[\\-\\/]([a-z]+)")
+            regex = "(\\d{4})[\\-\\/]([a-z]+)")
 
 # extracting all full matches using stri_extract all
-stri_extract_all(string = c("1970-somemonth-01 or maybe 1990/anothermonth/01",
+stri_extract_all(str = c("1970-somemonth-01 or maybe 1990/anothermonth/01",
                            "1990-somemonth-01 or maybe 2001/anothermonth/01"),
-                pattern = "(\\d{4})[\\-\\/]([a-z]+)")
+                regex = "(\\d{4})[\\-\\/]([a-z]+)")
 ```
 
 ### Breaking strings apart
@@ -303,9 +304,9 @@ The return type is a list similar to `stri_match`.
 
 ```{r}
 # split on either a hyphen or a forward slash
-stri_split(string = c("1970-somemonth-01",
+stri_split(str = c("1970-somemonth-01",
                      "1990/anothermonth/01"),
-          pattern = "[\\-\\/]")
+          regex = "[\\-\\/]")
 ```
 
 This can be useful in recovering simulation parameters from a filename, but may require some knowledge of `regex`.
@@ -315,24 +316,24 @@ This can be useful in recovering simulation parameters from a filename, but may 
 filename = "sim_param1_0.01_param2_0.05_param3_0.01.ext"
 
 # not quite there
-stri_split(filename, pattern = "_")
+stri_split(filename, regex = "_")
 
 # not really
 stri_split(filename,
-          pattern = "sim_")
+          regex = "sim_")
 
 # getting there but still needs work
 stri_split(filename,
-          pattern = "(sim_)|_*param\\d{1}_|(.ext)")
+          regex = "(sim_)|_*param\\d{1}_|(.ext)")
 ```
 
 `stri_split_fixed` split the string into as many pieces as specified, and can be especially useful dealing with filepaths.
 
 ```{r}
 # split on either a hyphen or a forward slash
-stri_split_fixed(string = "dir_level_1/dir_level_2/file.ext",
-                pattern = "/",
-                n = 2)
+stri_split_fixed(str = "dir_level_1/dir_level_2/file.ext",
+                 pattern = "/",
+                 n = 2)
 ```
 
 ### Replacing string elements
@@ -343,8 +344,8 @@ stri_split_fixed(string = "dir_level_1/dir_level_2/file.ext",
 # replace all unwanted characters from this hypothetical filename with spaces
 filename = "sim_param1_0.01_param2_0.05_param3_0.01.ext"
 stri_replace_all(filename,
-                pattern = "(sim_)|_*param\\d{1}_|(.ext)",
-                replacement = " ")
+                 regex = "(sim_)|_*param\\d{1}_|(.ext)",
+                 replacement = " ")
 ```
 
 `stri_remove` is a wrapper around `stri_replace` where the replacement is set to `""`. This is not covered here.
@@ -355,13 +356,13 @@ Having replaced unwanted characters in the filename with spaces, `stri_trim` off
 # trim whitespaces from this filename after replacing unwanted text
 filename = "sim_param1_0.01_param2_0.05_param3_0.01.ext"
 filename_with_spaces = stri_replace_all(filename,
-                                       pattern = "(sim_)|_*param\\d{1}_|(.ext)",
+                                       regex = "(sim_)|_*param\\d{1}_|(.ext)",
                                        replacement = " ")
 filename_without_spaces = stri_trim(filename_with_spaces)
 filename_without_spaces
 
 # the result can be split on whitespaces to return useful data
-stri_split(filename_without_spaces, " ")
+stri_split(filename_without_spaces, fixed = " ")
 ```
 
 ### Subsetting within strings
@@ -370,20 +371,20 @@ When strings are highly regular, useful data can be extracted from a string usin
 
 ```{r}
 # get the year as characters 1 - 4
-stri_sub(string = c("1970-somemonth-01",
-                   "1990-anothermonth-01",
-                   "2010-thismonth-01"),
-        start = 1, end = 4)
+stri_sub(str = c("1970-somemonth-01",
+                 "1990-anothermonth-01",
+                 "2010-thismonth-01"),
+         from = 1, to = 4)
 ```
 
 Similarly, it's possible to extract the last few characters using negative indices.
 
 ```{r}
 # get the day as characters -2 to -1
-stri_sub(string = c("1970-somemonth-01",
+stri_sub(str = c("1970-somemonth-01",
                    "1990-anothermonth-21",
                    "2010-thismonth-31"),
-        start = -2, end = -1)
+        from = -2, to = -1)
 ```
 
 Finally, it's also possible to replace characters within a string based on the position. This requires using the assignment operator `<-`.
@@ -396,7 +397,7 @@ date_times = c("1970-somemonth-25",
 
 # a strictly necessary use of the assignment operator
 stri_sub(date_times,
-        start = -2, end = -1) <- "01"
+        from = -2, to = -1) <- "01"
 
 date_times
 ```
@@ -407,45 +408,17 @@ Strings included in filenames or plots are often of unequal lengths, especially 
 
 ```{r}
 # pad so all values have three digits
-stri_pad(string = c("1", "10", "100"),
+stri_pad(str = c("1", "10", "100"),
         width = 3,
         side = "left",
         pad = "0")
 ```
 
-Strings can also be truncated if they are too long.
+[`stringi`](https://cran.r-project.org/web/packages/stringi/) offers a lot more flexibility and control.
 
-```{r}
-stri_trunc(string = c("bananas are great and wonderful
-                     and more stuff about bananas and
-                     it really goes on about bananas"),
-          width = 27,
-          side = "right", ellipsis = "etc. etc.")
-```
-
-### Stringr aspects not covered here
-
-Some `stringr` functions are not covered here. These include:
-
-- `stri_wrap` (of dubious use),
-
-- `stri_interp`, `stri_glue*` (better to use `glue`; see below),
-
-- `stri_sort`, `stri_order` (used in sorting a character vector),
-
-- `stri_to_case*` (case conversion), and
-
-- `stri_view*` (a graphical view of search pattern matches).
-
-- `word`, `boundary` etc. The use of word is covered below.
-
-[`stringi`](https://cran.r-project.org/web/packages/stringi/), of which `stringr` is a wrapper, offers a lot more flexibility and control.
-
-## String interpolation with `glue`
+## String interpolation with `sprintf`
 
 The idea behind string interpolation is to procedurally generate new complex strings from pre-existing data.
-
-`glue` is as simple as the example shown.
 
 ```{r}
 # print that each car name is a car model
@@ -475,38 +448,3 @@ glue_data(parameter_combinations,
 Finally, the convenient `glue_sql` and `glue_data_sql` are used to safely write SQL queries where variables from data are appropriately quoted. This is not covered here, but it is good to know it exists.
 
 `glue` has some more functions --- `glue_safe`, `glue_collapse`, and `glue_col`, but these are infrequently used. Their functionality can be found on the `glue` github page.
-
-## Strings in `ggplot`
-
-`ggplot` has two `geoms` (wait for the `ggplot` tutorial to understand more about geoms) that work with text: `geom_text` and `geom_label`. These geoms allow text to be pasted on to the main body of a plot.
-
-Often, these may overlap when the data are closely spaced. The package `ggrepel` offers another `geom`, `geom_text_repel` (and the related `geom_label_repel`) that help arrange text on a plot so it doesn't overlap with other features. This is *not perfect*, but it works more often than not.
-
-More examples can be found on the [ggrepl website](https://github.com/slowkow/ggrepel).
-
-Here, the arguments to `geom_text_repel` are taken both from the mtcars data (position), as well as from the car brands extracted using the `stringr::word` (labels), which tries to separate strings based on a regular pattern.
-
-The details of `ggplot` are covered in a later tutorial.
-
-
-```{r}
-library(ggplot2)
-library(ggrepel)
-
-# prepare car labels using word function
-car_labels = word(rownames(mtcars))
-
-ggplot(mtcars,
-       aes(x = wt, y = mpg,
-           label = rownames(mtcars)))+
-  geom_point(colour = "red")+
-  geom_text_repel(aes(label = car_labels),
-                  direction = "x",
-                  nudge_x = 0.2,
-                  box.padding = 0.5,
-                  point.padding = 0.5)
-
-```
-
-This is not a good looking plot, because it breaks other rules of plot design, such as whether this sort of plot should be made at all. Labels and text need to be applied sparingly, for example drawing attention or adding information to outliers.
-
