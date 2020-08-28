@@ -3,46 +3,34 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Reshaping data tables in the tidyverse, and other things
-
-Raphael Scherrer
+# Reshaping data.tables
 
 ![](opening-image.png)
 
 
 ```{r}
-library(tibble)
-library(tidyr)
+library(data.table)
 ```
 
-In this chapter we will learn what *tidy* means in the context of the tidyverse, and how to reshape our data into a tidy format using the `tidyr` package. But first, let us take a detour and introduce the `tibble`.
+The equivalent chapter in the TRES Tidyverse Tutorial has some explanation of what 'tidy' data is, but we'll leave the semantics aside and get to the code.
 
-## The new data frame: tibble
+## `data.table`: A `data.frame` extension
 
-The `tibble` is the recommended class to use to store tabular data in the tidyverse. Consider it as the operational unit of any data science pipeline. For most practical purposes, a `tibble` is basically a `data.frame`.
+The `data.table` is a development of the `data.frame`, which is faster and better in all possible ways. It does have some catches, which we'll deal with later.
 
 ```{r}
 # Make a data frame
 data.frame(who = c("Pratik", "Theo", "Raph"), chapt = c("1, 4", "3", "2, 5"))
 
-# Or an equivalent tibble
-tibble(who = c("Pratik", "Theo", "Raph"), chapt = c("1, 4", "3", "2, 5"))
+# Or an equivalent data.table
+data.table(who = c("Pratik", "Theo", "Raph"), chapt = c("1, 4", "3", "2, 5"))
 ```
 
-The difference between `tibble` and `data.frame` is in its display and in the way it is subsetted, among others. Most functions working with `data.frame` will work with `tibble` and vice versa. Use the `as*` family of functions to switch back and forth between the two if needed, using e.g. `as.data.frame` or `as_tibble`.
+The difference between `data.table` and `data.frame` is:
 
-In terms of display, the tibble has the advantage of showing the class of each column: `chr` for `character`, `fct` for `factor`, `int` for `integer`, `dbl` for `numeric` and `lgl` for `logical`, just to name the main atomic classes. This may be more important than you think, because many hard-to-find bugs in R are due to wrong variable types and/or cryptic type conversions. This especially happens with `factor` and `character`, which can cause quite some confusion. More about this in the extra section at the end of this chapter!
-
-Note that you can build a tibble by rows rather than by columns with `tribble`:
-
-```{r}
-tribble(
-  ~who, ~chapt,
-  "Pratik", "1, 4",
-  "Theo", "3",
-  "Raph", "2, 5"
-)
-```
+1. data.tables are built to be fast, and are actually external pointers to the memory location of the data.
+2. data.tables follow _copy on write_, which means they are copied only when they are saved to another variable.
+3. This follows from, or leads to the fact that data.tables also follow _modify by reference_ which means that data.tables do not make a copy when making a new column, making them faster and more efficient.
 
 As a rule of thumb, try to convert your tables to tibbles whenever you can, especially when the original table is *not* a data frame. For example, the principal component analysis function `prcomp` outputs a `matrix` of coordinates in principal component-space.
 
@@ -53,16 +41,12 @@ head(pca_scores) # looks like a data frame or a tibble...
 class(pca_scores) # but is actually a matrix
 
 # Convert to tibble
-as_tibble(pca_scores)
+as.data.table(pca_scores, keep.rownames = TRUE)
 ```
 
-This is important because a `matrix` can contain only one type of values (e.g. only `numeric` or `character`), while `tibble` (and `data.frame`) allow you to have columns of different types.
-
-So, in the tidyverse we are going to work with tibbles, got it. But what does "tidy" mean exactly?
+This is important because a `matrix` can contain only one type of values (e.g. only `numeric` or `character`), while `data.tables` (and `data.frame`) allow you to have columns of different types.
 
 ## The concept of tidy data
-
-When it comes to putting data into tables, there are many ways one could organize a dataset. The *tidy* format is one such format. According to the formal [definition](https://tidyr.tidyverse.org/articles/tidy-data.html), a table is tidy if each column is a variable and each row is an observation. In practice, however, I found that this is not a very operational definition, especially in ecology and evolution where we often record multiple variables per individual. So, let's dig in with an example.
 
 Say we have a dataset of several morphometrics measured on Darwin's finches in the Galapagos islands. Let's first get this dataset.
 
@@ -74,7 +58,7 @@ body_weights <- rgamma(100, shape = 10, rate = 1)
 islands <- rep(c("Isabela", "Santa Cruz"), each = 50)
 
 # Assemble into a tibble
-data <- tibble(
+data <- data.table(
   id = 1:100,
   body_weight = body_weights,
   beak_length = beak_lengths,
@@ -86,26 +70,18 @@ data <- tibble(
 data
 ```
 
-Here, we pretend to have measured `beak_length`, `beak_width` and `body_weight` on 100 birds, 50 of them from Isabela and 50 of them from Santa Cruz. In this tibble, each row is an individual bird. This is probably the way most scientists would record their data in the field. However, a single bird is not an "observation" in the sense used in the tidyverse. Our dataset is not tidy but *messy*.
-
-The tidy equivalent of this dataset would be:
+This is converted to long format using `melt`.
 
 ```{r}
-data <- pivot_longer(
+data <- melt(
   data,
-  cols = c("body_weight", "beak_length", "beak_width"),
-  names_to = "variable"
+  id.vars = c("id", "island")
 )
+
 data
 ```
 
-where each *measurement* (and not each *individual*) is now the unit of observation (the rows). The `pivot_longer` function is the easiest way to get to this format. It belongs to the `tidyr` package, which we'll cover in a minute.
-
-As you can see our tibble now has three times as many rows and fewer columns. This format is rather unintuitive and not optimal for display. However, it provides a very standardized and consistent way of organizing data that will be understood (and expected) by pretty much all functions in the tidyverse. This makes the tidyverse tools work well together and reduces the time you would otherwise spend reformatting your data from one tool to the next.
-
-That does not mean that the *messy* format is useless though. There may be use-cases where you need to switch back and forth between formats. For this reason I prefer referring to these formats using their other names: *long* (tidy) versus *wide* (messy). For example, matrix operations work much faster on wide data, and the wide format arguably looks nicer for display. Luckily the `tidyr` package gives us the tools to reshape our data as needed, as we shall see shortly.
-
-Another common example of wide-or-long dilemma is when dealing with *contingency tables*. This would be our case, for example, if we asked how many observations we have for each morphometric and each island. We use `table` (from base R) to get the answer:
+A common example of wide-or-long dilemma is when dealing with *contingency tables*. This would be our case, for example, if we asked how many observations we have for each morphometric and each island. We use `table` (from base R) to get the answer.
 
 ```{r}
 # Make a contingency table
@@ -113,39 +89,34 @@ ctg <- with(data, table(island, variable))
 ctg
 ```
 
-A variety of statistical tests can be used on contingency tables such as Fisher's exact test, the chi-square test or the binomial test. Contingency tables are in the wide format by construction, but they too can be pivoted to the long format, and the tidyverse manipulation tools will expect you to do so. Actually, `tibble` knows that very well and does it by default if you convert your `table` into a `tibble`:
+`as.data.table` converts wide to long automatically.
 
 ```{r}
 # Contingency table is pivoted to the long-format automatically
-as_tibble(ctg)
+as.data.table(ctg)
 ```
 
-::: {.infobox .caution data-latex="{summary}"}
-*Summary: Tidy or not tidy*
+### Pivoting long to wide
 
-To sum up, the definition of what is tidy and what is not is somewhat subjective. Tables can be in long or wide format, and depending on the complexity of a dataset, there may even be some intermediate states. To be clear, the tidyverse does not only accept long tables, and wide tables may sometimes be the way to go. This is very use-case specific. Have a clear idea of what you want to do with your data (what tidyverse tools you will use), and use that to figure which format makes more sense. And remember, `tidyr` is here to easily do the switching for you.
-:::
+Data can be 'cast' from wide to long. 
+FYI: The analogy is from working with metals, which are melted, and then cast.
 
-## Reshaping with `tidyr`
-
-The `tidyr` package implements tools to easily switch between layouts and also perform a few other reshaping operations. Old school R users will be familiar with the `reshape` and `reshape2` packages, of which `tidyr` is the tidyverse equivalent. Beware that `tidyr` is about playing with the general *layout* of the dataset, while *operations* and *transformations* of the data are within the scope of the `dplyr` and `purrr` packages. All these packages work hand-in-hand really well, and analysis pipelines usually involve all of them. But today, we focus on the first member of this holy trinity, which is often the first one you'll need because you will want to reshape your data before doing other things. So, please hold your non-layout-related questions for the next chapters.
-
-### Pivoting
-
-Pivoting a dataset between the long and wide layout is the main purpose of `tidyr` (check out the package's logo). We already saw the `pivot_longer` function above. This function converts a table form wide to long format. Similarly, there is a `pivot_wider` function that does exactly the opposite and takes you back to the wide format:
+`data.table`'s `dcast` takes a `data.table` or `data.frame`, and a formula where the left hand side is made up of the id variables, while the right hand side is the measure variables. The value variable can be specified using `value.var`.
 
 ```{r}
-pivot_wider(
-  data,
-  names_from = "variable",
-  values_from = "value",
-  id_cols = c("id", "island")
-)
+dcast(data,
+      id + island ~ variable, value.var = "value")
 ```
 
-The order of the columns is not exactly as it was, but this should not matter in a data analysis pipeline where you should access columns by their names. It is straightforward to change the order of the columns, but this is more within the scope of the `dplyr` package.
+### Pivoting with aggregation
 
-If you are familiar with earlier versions of the tidyverse, `pivot_longer` and `pivot_wider` are the respective equivalents of `gather` and `spread`, which are now deprecated.
+`data.table` `dcast` also allows aggregation when there is more than one value per combination of LHS and RHS. In fact, a list of aggregation functions can be specified. Here we pass a list containing `mean` and `sd` functions.
+
+```{r}
+dcast(data,
+      island ~ variable, value.var = "value",
+      fun.aggregate = list(mean, sd))
+```
 
 There are a few other reshaping operations from `tidyr` that are worth knowing.
 
@@ -160,27 +131,37 @@ data$value[ii] <- NA
 data
 ```
 
-We could get rid of the rows that have missing values using `drop_na`:
+Remove rows that have missing values using `na.omit`.
 
 ```{r}
-drop_na(data, value)
+na.omit(data, "value")
 ```
 
-Else, we could replace the NAs with some user-defined value:
+Else, we could replace the NAs with some user-defined value.
 
 ```{r}
-replace_na(data, replace = list(value = -999))
+setnafill(data, 
+       cols = "value",
+       type = "const", fill = -999)
 ```
 
-where the `replace` argument takes a named list, and the names should refer to the columns to apply the replacement to.
+Here we encounter `data.table`'s _modify in place_ functionality. Functions starting with `set*` modify the relevant columns in place. In the example above, the `value` column has had `NA`s replaced with `-999` *without being assigned* using the assignment operator.
 
-We could also replace NAs with the most recent non-NA values:
+We could also replace NAs with the most recent non-NA values.
 
 ```{r}
-fill(data, value)
-```
+ii <- sample(nrow(data), 100)
+data$value[ii] <- NA
+data
 
-Note that most functions in the tidyverse take a tibble as their first argument, and columns to which to apply the functions are usually passed as "objects" rather than character strings. In the above example, we passed the `value` column as `value`, not `"value"`. These column-objects are called by the tidyverse functions *in the context* of the data (the tibble) they belong to.
+# use locf
+setnafill(data, 
+       cols = "value",
+       type = "locf")
+
+# examine data
+data
+```
 
 ### Splitting and combining cells
 
