@@ -1,39 +1,31 @@
-# [TRES Tidyverse Tutorial](https://pratikunterwegs.github.io/tres-tidy-tutorial/)
+# [The `tidy`-less Tutorial](https://pratikunterwegs.github.io/tidyless-tutorial/)
 
-This is the source code for the TRES [tidyverse](https://www.tidyverse.org/) tutorial.
-The readable version can be accessed by clicking the page title above.
+This is the source code for the `tidy`-less tutorial, where we do two things:
+1. Introduce you to the wonders of the `data.table` package, and
+2. Take you back to base `R`,
+all while retaining the functionality of the `tidy/Hadley`-verse.
 
-## About
+A readable `bookdown` version can be accessed by clicking the page title above.
 
-The TRES tidyverse tutorial is an online workshop on how to use the tidyverse, a set of packages in the R computing language designed at making data handling and plotting easier. 
+## But why!?
 
-This tutorial will take the form of a one hour per week video stream via Google Meet, every Friday morning at 10.00 (Groningen time) starting from the 29th of May, 2020 and lasting for a couple of weeks (depending on the number of topics we want to cover, but there should be at least 5). 
+> I feel a disturbance in the force...
 
-**People from outside our department are welcome to attend.**
+That disturbance is probably the confusion of why we'd make a tutorial that teaches you how _not_ to use the tidyverse --- especially after spending two months teaching you why and how you _should_.
 
-## Schedule
+### No really, why?
 
-Topic                               |Package|Instructor|Date*
-------------------------------------|---|---|---
-Reading data and string manipulation|[readr](https://readr.tidyverse.org/), [stringr](https://stringr.tidyverse.org/), [glue](https://github.com/tidyverse/glue)|Pratik|29/05/20
-Data and reshaping                  |[tibble](https://tibble.tidyverse.org/), [tidyr](https://tidyr.tidyverse.org/), [forcats](https://forcats.tidyverse.org/)|Raphael|05/06/20
-Manipulating data                   |[dplyr](https://dplyr.tidyverse.org/)|Theo|12/06/20
-Working with lists and iteration    |[purrr](https://purrr.tidyverse.org/)|Pratik|19/06/20
-Plotting                            |[ggplot2](https://ggplot2.tidyverse.org/)|Raphael|26/06/20
-Programming with the tidyverse      |[rlang](https://rlang.r-lib.org/)|Pratik|10/07/20
-Regular expressions                 |[stringr](https://stringr.tidyverse.org)|Richel|17/07/20
-Package development                 |[devtools, usethis, roxygen2](http://r-pkgs.had.co.nz/)|Raphael|24/07/20
+The `tidyverse` is fine. If you want to use it, go ahead. But when you pass beyond the level of bashing out a simple analysis in `R` you might want to leave the `tidyverse` behind. When do you know you've passed beyond the basics?
 
-Branch   |[Travis CI build status](https://travis-ci.org)                                                                                          
----------|-------------------------------------------------------------------------------------------------------------------------------------------------------
-`master` |[![Build Status](https://travis-ci.org/pratikunterwegs/tres-tidy-tutorial.svg?branch=master)](https://travis-ci.org/pratikunterwegs/tres-tidy-tutorial)
-`richel` |[![Build Status](https://travis-ci.org/pratikunterwegs/tres-tidy-tutorial.svg?branch=richel)](https://travis-ci.org/pratikunterwegs/tres-tidy-tutorial)
+For example:
+1. You're building and maintaining code (for example as an `R` package) and this means minimising dependencies,
+2. Your `R` code needs to deal with very large datasets,
+3. You work with people who don't use the `tidyverse` and are more comfortable in base `R` (and their preferences take priority),
+4. Some combination of the above.
 
-## Join
+### Less tangible reasons
 
-Join the Slack [by clicking this link (Slack account required)](https://join.slack.com/t/trestidytorial/shared_invite/zt-ejgr3tow-3zisGwPg1JDeTJD33DWb2A).
-
-*Tentative dates.
+People have pointed out that the `tidyverse` is syntactically nearly a different language from `R` entirely. This comes from it being developed by a small group of people at RStudio, a company that makes the most widely used IDE for `R`. This gives RStudio a larger platform to push their ideas for `R`, and it can be problematic if a single company basically defines the user preferences for an open source project. These arguments are better laid out in: LINK HERE.
 
 ## Additional resources
 
