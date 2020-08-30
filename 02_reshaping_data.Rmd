@@ -5,7 +5,7 @@ editor_options:
 
 # Reshaping data.tables
 
-![](opening-image.png)
+![](wip.png)
 
 
 ```{r}
@@ -177,116 +177,75 @@ data$year <- sample(2019:2020, nrow(data), replace = TRUE)
 data
 ```
 
-We could combine the `day`, `month` and `year` columns into a single `date` column, with a dash as a separator, using `unite`:
+We could combine the `day`, `month` and `year` columns into a single `date` column, with a dash as a separator, using `base::paste` or `base::sprintf`.
+
+### Assignment in a data table {-}
+
+Here is a first example of assigning a column in a `data.table`.
+We use the `:=` operator in combination with square brackets `[]` and a `,`.
+
+A pseudo-code explanation is:
+
+`DT[, new_column := function(old_column <OR> other)]`
 
 ```{r}
-data <- unite(data, day, month, year, col = "date", sep = "-")
-data
+# using paste
+data[, date := paste(day, month, year, sep = "-")]
+
+# using sprintf
+data[, data_sprintf := sprintf("%i-%i-%i", day, month, year)]
 ```
 
-Of course, we can revert back to the previous dataset by splitting the `date` column with `separate`.
+Splitting a column is a equally easy using the `data.table::tstrsplit` function, which transposes the results of `strsplit`.
 
 ```{r}
-separate(data, date, into = c("day", "month", "year"))
+# using stringi::stri_split
+data[, c("day_new", "month_new", "year_new") := tstrsplit(date, split = "-")]
 ```
 
-But note that the `day`, `month` and `year` columns are now of class `character` and not `integer` anymore. This is because they result from the splitting of `date`, which itself was a `character` column.
-
-You can also separate a single column into multiple *rows* using `separate_rows`:
-
-```{r}
-separate_rows(data, date)
-```
+Note the type conversion here.
 
 ### Expanding tables using combinations
 
 Instead of getting rid of rows with NAs, we may want to add rows with NAs, for example, for combinations of parameters that we did not measure.
 
-```{r}
-data <- separate(data, date, into = c("day", "month", "year"))
-to_rm <- with(data, island == "Santa Cruz" & year == "2020")
-data <- data[!to_rm,]
-tail(data)
-```
-
-We could generate a tibble with all combinations of island, morphometric and year using `expand_grid`:
+We could generate a tibble with all combinations of island, morphometric and year using `CJ`:
 
 ```{r}
-expand_grid(
+CJ(
   island = c("Isabela", "Santa Cruz"),
   year = c("2019", "2020")
 )
 ```
 
-If we already have a tibble to work from that contains the variables to combine, we can use `expand` on that tibble:
+As you can see, we get all the combinations of the variables of interest, even those that are missing. But sometimes you might be interested in variables that are *nested* within each other and not *crossed*. For example, say we have measured birds at different locations within each island.
 
 ```{r}
-expand(data, island, year)
+# assign sites A and B to Isabella
+# and C and D to Santa Cruz
+data[, site := unlist(lapply(data$island, 
+                             function(z) {
+                               ifelse(z == "Isabela",
+                                      sample(LETTERS[1:2]),
+                                      sample(LETTERS[3:4]))
+                               })
+                      )]
 ```
 
-As you can see, we get all the combinations of the variables of interest, even those that are missing. But sometimes you might be interested in variables that are *nested* within each other and not *crossed*. For example, say we have measured birds at different locations within each island:
+Of course, if sites A and B are on Isabela, they cannot be on Santa Cruz, where we have sites C and D instead. We can figure out which combinations exist in the data using the `duplicated` function.
+
+`duplicated` returns a `logical` vector, which can be used to filter the data.table.
 
 ```{r}
-nrow_Isabela <- with(data, length(which(island == "Isabela")))
-nrow_SantaCruz <- with(data, length(which(island == "Santa Cruz")))
-sites_Isabela <- sample(c("A", "B"), size = nrow_Isabela, replace = TRUE)
-sites_SantaCruz <- sample(c("C", "D"), size = nrow_SantaCruz, replace = TRUE)
-sites <- c(sites_Isabela, sites_SantaCruz)
-data$site <- sites
-data
+dt_new[!duplicated(dt_new[, .(island, site, year)]), # check for dups
+       .(island, site, year)] # select column in the data.table
 ```
 
-Of course, if sites A and B are on Isabela, they cannot be on Santa Cruz, where we have sites C and D instead. It would not make sense to `expand` assuming that `island` and `site` are crossed, instead, they are nested. We can therefore expand using the `nesting` function:
+### Nesting or list columns
 
-```{r}
-expand(data, nesting(island, site, year))
-```
+`data.table` supports nested list columns, where the contents of a cell are not atomic (integers, numerics, characters etc.), but more complex objects such as vectors or data.tables themselves.
 
-But now the missing data for Santa Cruz in 2020 are not accounted for because `expand` thinks the `year` is also nested within island. To get back the missing combination, we use `crossing`, the complement of `nesting`:
-
-```{r}
-expand(data, crossing(nesting(island, site), year)) # both can be used together
-```
-
-Here, we specify that `site` is nested within `island` and these two are crossed with `year`. Easy!
-
-But wait a minute. These combinations are all very good, but our measurements have disappeared! We can get them back by levelling up to the `complete` function instead of using `expand`:
-
-```{r}
-tail(complete(data, crossing(nesting(island, site), year)))
-# the last row has been added, full of NAs
-```
-
-which nicely keeps the rest of the columns in the tibble and just adds the missing combinations.
-
-### Nesting
-
-The `tidyr` package has yet another feature that makes the tidyverse very powerful: the `nest` function. However, it makes little sense without combining it with the functions in the `purrr` package, so we will not cover it in this chapter but rather in the `purrr` chapter.
-
-### What else can be tidied up?
-
-#### Model output with `broom`
-
-Check out the [`broom`](https://cran.r-project.org/web/packages/broom/vignettes/broom.html) package and its `tidy` function to tidy up messy linear model output, e.g.
-
-```{r}
-library(broom)
-fit <- lm(mpg ~ cyl, mtcars)
-summary(fit)
-tidy(fit) # returns a tibble
-```
-
-The `broom` package is just one package among a series of packages together known as [tidymodels](https://www.tidymodels.org/) that deal with statistical models according to the tidyverse philosophy, and those include machine learning models.
-
-#### Graphs with `tidygraph`
-
-For some datasets, sometimes there is no trivial and intuitive way to store them into a table. This is the case, for example, for data underlying graphs (as in networks), which contain information about relations between entities. What is the unit of observation in a network? A node? An edge between two nodes? Nodes and edges in a network may each have node- or edge-specific variables mapped to them, and both may be equally valid units of observation. The [`tidygraph`](https://www.data-imaginist.com/2017/introducing-tidygraph/) package has tools to store graph-data in a tidyverse-friendly object, consisting of two tibbles: one for node-specific information, the other for edge-specific information. This package goes hand in hand with the [`ggraph`](https://ggraph.data-imaginist.com/), that makes plotting networks compatible with the grammar of graphics.
-
-#### Trees with `tidytree`
-
-Phylogenetic trees are a special type of graphs suffering from the same issue, i.e. of being non-trivial to store in a table. The [`tidytree`](https://yulab-smu.github.io/treedata-book/) package and its companion `treeio` offer an interface to convert tree-like objects (from most format used by other packages and software) into a tidyverse-friendly format. Again, the point is that the rest of the tidyverse can be used to wrangle or plot this type of data in the same way as one would do with regular tabular data. For plotting a `tidytree` with the grammar of graphics, see [`ggtree`](https://guangchuangyu.github.io/ggtree-book/chapter-ggtree.html).
-
-## Extra: factors and the `forcats` package
+## Extra: Dealing with factors
 
 ```{r}
 library(forcats)
@@ -317,6 +276,8 @@ we would still have the the same levels. Note that the levels are returned as a 
 ```{r}
 levels(my_fact_vec)
 ```
+
+![](wip.png)
 
 Why does it matter? Well, most operations on categorical variables can be performed on `character` of `factor` objects, so it does not matter so much which one you use for your own data. However, some functions in R require you to provide categorical variables in one specific format, and others may even implicitely convert your variables. In `ggplot2` for example, character vectors are converted into factors by default. So, it is always good to remember the differences and what type your variables are.
 
@@ -350,11 +311,11 @@ my_plot(data)
 
 Here, the islands (horizontal axis) and the variables (the facets) are displayed in alphabetical order. When making a figure you may want to customize these orders in such a way that your message is optimally conveyed by your figure, and this may involve playing with the order of levels.
 
-Use `fct_relevel` to manually change the order of the levels:
+Simply use `factor` with the `levels = (...)` argument to set the factor levels as required.
 
 ```{r}
 data$island <- as.factor(data$island) # turn this column into a factor
-data$island <- fct_relevel(data$island, c("Santa Cruz", "Isabela"))
+data$island <- factor(data$island, levels = c("Santa Cruz", "Isabela"))
 my_plot(data) # order of islands has changed!
 ```
 
@@ -362,10 +323,10 @@ Beware that reordering a factor *does not change* the order of the items within 
 
 ```{r}
 data$island[1:10]
-fct_relevel(data$island, c("Isabela", "Santa Cruz"))[1:10] # same thing, different levels
+factor(data$island, levels = c("Isabela", "Santa Cruz"))[1:10] # same thing, different levels
 ```
 
-Alternatively, use `fct_inorder` to set the order of the levels to the order in which they appear:
+When converting a column to a factor, the levels are set _by default_ in the order in which they appear. The example below shows this in the ordering of the `beak_*` metrics, where the order is of appearance, and not alphabetical.
 
 ```{r}
 data$variable <- as.factor(data$variable)
@@ -376,8 +337,13 @@ levels(fct_inorder(data$variable))
 or `fct_rev` to reverse the order of the levels:
 
 ```{r}
-levels(fct_rev(data$island)) # back in the alphabetical order
+levels(data$island)
+# now in reversed order
+levels(factor(data$island, 
+              levels = rev(levels(data$island)))) 
 ```
+
+![](wip.png)
 
 Other variants exist to do more complex reordering, all present in the forcats  [cheatsheet](https://rstudio.com/resources/cheatsheets/), for example:
 * `fct_infreq` to re-order according to the frequency of each level (how many observation on each island?)
