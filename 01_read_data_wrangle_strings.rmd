@@ -6,9 +6,9 @@ editor_options:
 # Reading files and string manipulation
 
 Instead of using `stringr`, we will use the `stringi` package on which it is based, and read files using the `data.table` package. 
-`glue` is great, simply use `glue`.
+We will use `paste` and `sprintf` from base `R` to handle string interpolation.
 
-![](opening-image.png)
+![](wip.png)
 
 
 Load the packages for the day.
