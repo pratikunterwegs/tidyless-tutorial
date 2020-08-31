@@ -73,6 +73,9 @@ data$binomial
 head(
   setDF(data)[, "binomial"] # note the changed class
 )
+
+# reset to data.table
+setDT(data)
 ```
 
 In the lines above we used the `setDF` command which converts the data.table into a regular data.frame. This happens in-place, i.e, the result does not need to be assigned to an oject.
@@ -155,7 +158,6 @@ data[mass_g > 1e7, c("binomial", "mass_g")]
 
 # non-extinct megafauna
 data[mass_g > 1e5 & iucn_status != "EP", c("binomial", "mass_g")]
-
 ```
 
 Are there any flying mammals that aren't bats?
@@ -201,7 +203,7 @@ existing ones. This is done easily through `:=`. This modified the data.table in
 # pull the diet columns
 # see the regex chapter for how to work with regular expression
 diet_cols <- c(stringi::stri_subset(colnames(data), 
-                                    regex = "(diet)(?!.*method|source)"),
+                                    regex = "(diet)(?!.[method|source])"),
                "binomial")
 
 data[, ..diet_cols]
@@ -234,206 +236,83 @@ diet_data[, diet_animal := diet_vertebrate + diet_invertebrate]
 diet_data[, binomial, diet_animal]
 ```
 
-### Summarise observations with `summarise()`
+### Summarising variables
 
-`mutate()` applies operations to all observations in a table. By contrast,
-`summarise()` applies operations to *groups* of observations, and returns, er,
-summaries. The default grouping unit is the entire table:
+To get summary values within groups, the general syntax for a data.table is shown below with an example.
+
+**General syntax**
+
+`dt[, .(summary_var = function(existing_var)), by = .(grouping_var)]`
+
+When no grouping variables are supplied, values are summarised over the entire data.table.
 
 ```{r summarise}
-phylacine %>%
-  summarise(
-    "nb_species" = n(), # counts observations
-    "nb_terrestrial" = sum(terrestrial),
-    "nb_marine" = sum(marine),
-    "nb_freshwater" = sum(freshwater),
-    "nb_aerial" = sum(aerial),
-    "mean_mass_g" = mean(mass_g)
-  )
+data[, .(nb_species = .N,
+         nb_terrestrial = sum(terrestrial),
+         nb_marine = sum(marine),
+         nb_freshwater = sum(freshwater),
+         nb_aerial = sum(aerial),
+         mean_mass_g = mean(mass_g))]
 ```
 
-Above you can see that bats account for a large portion of mammal species
-diversity (`nb_aerial`). How much exactly? Just as with `mutate()`, you can
-perform operations on the variables you just created, in the same statement:
+### Summarising within groups
 
-```{r prop_bats}
-phylacine %>%
-  summarise(
-    "nb_species" = n(),
-    "nb_aerial" = sum(aerial), # bats
-    "prop_aerial" = nb_aerial / nb_species
-  )
-```
-
-One fifth!
-
-If the british spelling bothers you, `summarize()` exists and is strictly
-equivalent.
-
-Here's a simple trick with logical (TRUE / FALSE) variables. Their sum is the
-count of observations that evaluate to `TRUE` (because `TRUE` is taken as 1 and
-`FALSE` as 0) and their mean is the proportion of `TRUE` observations. This can
-be exploited to count the number of observations that satisfy a condition:
-
-```{r sum_logi}
-phylacine %>%
-  summarise(
-    "nb_species" = n(),
-    "nb_megafauna" = sum(mass_g > 100000),
-    "p_megafauna" = mean(mass_g > 100000)
-  )
-
-```
-
-There are more summaries that just means and counts
-(see `?summarise()` for some helpful functions). In fact, summarise can
-use any function or expression that evaluates to a single value or a *vector*
-of values. This includes base R `max()`, `quantiles`, etc.
-
-`mutate()` and `transmute()` can compute summaries as well, but they will
-return the summary once for each observation, in a new column.
-
-```{r mutate_summary}
-phylacine %>%
-  mutate("nb_species" = n()) %>%
-  select(binomial, nb_species)
-```
-
-### Grouping observations by variables
-
-In most cases you don't want to run summary operations on the entire set of observations, but instead on observations that share a common value, i.e. groups.
-For example, I want to run the summary displayed above, but for each Order of mammals.
-
-`distinct()` extracts all the unique values of a variable
-
-```{r distinct_orders}
-phylacine %>% distinct(order)
-```
-
-I could work my way with what we have already seen, filtering observations (`filter(order == "Rodentia")`) and then pipeing the output to `summarise()`, and do it again for each Order. But that would be tedious.
-
-Instead, I can use `group_by()` to pool observations by `order`.
-
-```{r group_by_order}
-phylacine %>%
-  group_by(order)
-```
-
-At first glance, nothing has changed, apart from an extra line of information in the output that tells me the observations have been grouped. But now here's what happen if I run the same `summarise()` statement on an ungrouped and a grouped table
+Summarising within groups is very easily done by passing one or more column names to the `by = ` argument.
 
 ```{r summarise_order}
-phylacine %>%
-  summarise(
-    "n_species" = n(),
-    "mean_mass_g" = mean(mass_g)
-  )
+# get a species count and mean mass by order
+data[, .(n_species = .N,
+         mean_mass_g = mean(mass_g)),
+     by = .(order)]
 
-phylacine %>%
-  group_by(order) %>%
-  summarise(
-    "n_species" = n(),
-    "mean_mass_g" = mean(mass_g)
-  )
+# passing a list is equivalent to using the .
+# renaming on the fly is supported
+data[, list(n_species = .N,
+         mean_mass_g = mean(mass_g)),
+     by = list(mammal_order = order)]
 ```
-
-I get one value for each group.
 
 Observations can be grouped by multiple variables, which will output a summary for every unique combination of groups.
 
 ```{r multiple_groups}
-phylacine %>%
-  group_by(order, iucn_status) %>%
-  summarise(
-    "n_species" = n()
-  )
+# group by order and family
+data[, list(n_species = .N,
+         mean_mass_g = mean(mass_g)),
+     by = list(mammal_order = order,
+               mammal_family = family)]
 ```
 
-Whenever you call `summarise()`, the last level of grouping is dropped. Note how in the output table above, observations are still grouped by order, and no longer by IUCN status. If I summarise observations again:
-
-```{r drop_grouping}
-phylacine %>%
-  group_by(order, iucn_status) %>%
-  summarise(
-    "n_species" = n()
-  ) %>%
-  summarise(
-    "n_species_2" = n()
-  )
-```
-
-I get the summary across orders, and the table is no longer grouped at all. This is useful to consider if you need to work on summaries across different levels of the data.
-
-For example, I would like to know how the species in each order are distributed between the different levels of threat in the IUCN classification. To get these proportions, I need to first get the count of each number of species in a level of threat inside an order, and divide that by the number of species in that order.
+Operation chaining is easily done.
 
 ```{r iucn_prop}
-phylacine %>%
-  group_by(order, iucn_status) %>%
-  summarise("n_order_iucn" = n()) %>%
-  # grouping by iucn_status silently dropped
-  mutate(
-    "n_order" = sum(n_order_iucn),
-    "p_iucn" = n_order_iucn / n_order
+# operation chaining is possible but not recommended
+head(                                             # showing only the top rows
+  setorder(                                       # arranging by order
+    data[, list(n_order_iucn = .N),               # counting order-iucnn sums
+         by = list(order, iucn_status)
+         ][, n_order := sum(n_order_iucn),        # counting order wise species
+           by = order
+           ][, p_iucn := n_order_iucn / n_order], # get proportions
+    order
   )
+)
 ```
-
-10.2% of Carnivores are Endangered ("EN").
-
-### Grouped data and other `dplyr` verbs
-
-Grouping does not only affect the behaviour of `summarise`, but under circumstances, other verbs can (and will!) perform operations by groups.
-
-```{r grouped_filter}
-# Species with a higher mass than the mammal mean
-phylacine %>%
-  select("binomial", "mass_g") %>%
-  filter(mass_g > mean(mass_g, na.rm = TRUE))
-
-# Species with a higher mass than the mean in their order
-phylacine %>%
-  group_by(order) %>%
-  select("binomial", "mass_g") %>%
-  filter(mass_g > mean(mass_g, na.rm = TRUE))
-
-```
-
-```{r grouped_slice}
-# Largest mammal
-phylacine %>%
-  select(binomial, mass_g) %>%
-  slice_max(mass_g)
-# Largest species in each order
-phylacine %>%
-  group_by(order) %>%
-  select(binomial, mass_g) %>%
-  slice_max(mass_g)
-```
-
-To avoid grouped operations, you can simply drop grouping with `ungroup()`.
 
 ## Working with multiple tables
 
 ### Binding tables
 
-`dplyr` introduces `bind_rows()` and `bind_cols()`, which are equivalent to base
-R `rbind()` and `cbind()`, with a few extra feature. They are faster, and can
-bind many tables at once, and bind data frames with vectors or lists.
-
-`bind_rows()` has an option to pass a variable specifying which dataset each
-observation originates from.
+`data.table` provides the `rbindlist` function to bind data.tables row or column wise.
 
 ```{r id_bind}
-porpoises <- phylacine %>%
-  filter(family == "Phocoenidae") %>%
-  select(binomial, iucn_status)
-echidnas <- phylacine %>%
-  filter(family == "Tachyglossidae") %>%
-  select(binomial, iucn_status)
+# get porpoises
+porpoises <- data[family == "Phocoenidae", list(binomial, iucn_status)]
+echidnas <- data[family == "Tachyglossidae", list(binomial, iucn_status)]
 
-bind_rows(
-  "porpoise" = porpoises,
-  "echidna" = echidnas,
-  .id = "kind"
-)
+# bind into a single data.table
+rbindlist(l = list(porpoises = porpoises, 
+                   echidnas = echidnas),
+          idcol = "kind")
 ```
 
 ### Combining variables of two tables with mutating joins
@@ -441,14 +320,14 @@ bind_rows(
 Mutating joins are tailored to combine tables that share a set of observations
 but have different variables.
 
-As an example, let's split the `phylacine` dataset in two smaller datasets,
-one containing information on diet and one on the dominant habitat.
+In the example below, the data is split into habitat and diet data, recombined by species.
 
 ```{r split_phylacine}
-diet <- phylacine %>%
-  select(binomial, diet_plant:diet_invertebrate) %>%
-  slice(1:5)
-diet
+# get species and diet data
+cols_wanted <- c("binomial",
+                 stringi::stri_subset(colnames(data), regex = "(diet)(?!.[source|method])"))
+# get diet
+diet <- data[seq(5), ..cols_wanted]
 
 life_habit <- phylacine %>% select(binomial, terrestrial:aerial) %>%
   slice(1:3, 6:7)
