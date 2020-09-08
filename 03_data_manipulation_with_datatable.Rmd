@@ -6,14 +6,12 @@ editor_options:
 # Data manipulation with `data.table`
 
 ```{r load_lib}
-# load the tidyverse
 library(data.table)
 ```
 
 ## Introduction
 
-Through this tutorial, we will be using mammal trait data from the [Phylacine](https://megapast2future.github.io/PHYLACINE_1.2/) database.
-Let's have a peek at what it contains.
+This tutorial uses mammal trait data from the [Phylacine](https://megapast2future.github.io/PHYLACINE_1.2/) database, which must first be read in.
 
 ```{r read_data, message=FALSE}
 data <- fread("data/phylacine_traits.csv")
@@ -78,10 +76,10 @@ head(
 setDT(data)
 ```
 
-In the lines above we used the `setDF` command which converts the data.table into a regular data.frame. This happens in-place, i.e, the result does not need to be assigned to an oject.
+Remember that in the lines above the `setDF` command which converts the data.table into a regular data.frame. This happens in-place, i.e, the result does not need to be assigned to an object.
 The `setDT` function is the opposite, converting a data.frame to a data.table.
 
-### Selecting variables
+### Selecting multiple variables
 
 Selecting variables is done by passing a list-like object to the data.table.
 Columns can be renamed while selecting by passing a named list.
@@ -100,7 +98,10 @@ data[, list(binomial, order)]
 data[, list(species = binomial, species_order = order)]
 ```
 
+### Removing variables
+
 It is not really possible to remove columns from a data.table by appending a `-` sign; instead the variables have to be set to `NULL`, which is the same as it would be for a data.frame. The example below shows how.
+Recall the _assign in place_ operator `:=` which is used here to remove a column.
 
 ```{r exclude}
 # we remove one variable
@@ -109,12 +110,19 @@ data[, diet_source := NULL]
 colnames(data)
 ```
 
+Multiple variables can be removed using the general form of assigning variables.
+The example below shows how, but is not run.
+
+```{r eval=FALSE}
+data[, `:=(order = NULL, family = NULL)]
+```
+
 ### Select variables by pattern
 
-Selecting variables sharing parts of their names is relatively easy using the `stringi` package.
+Selecting variables sharing parts of their names is relatively easy using the `stringi` package. The trick is to detect a particular pattern in the column names, and to keep only those columns which contain the pattern. This is a bit more involved than `dplyr::select`, but think of the package dependency avoided.
 
 ```{r select_help}
-# select diet information by pattern
+# select diet information by detecting a pattern
 names_to_select <- stringi::stri_subset(colnames(data), fixed ="diet")
 data[, ..names_to_select]
 ```
@@ -126,7 +134,9 @@ data[, ..names_to_select]
 `setorder` sorts rows in the data by **ascending** value for a given variable.
 Use the argument `order = 1 OR -1` to sort by ascending or descending values (with ascending as default).
 
-`setorder` and the related `setorderv` operate _in place_, and are thus memory efficient. It also means that you need to be careful when 'just testing' something out --- the order is changed when you use the command. Moreover, the order of other pointers to the data is also changed, unless they have a distinct memory location.
+`setorder` and the related `setorderv` operate _in place_, and are thus memory efficient. It also means that you need to be careful when 'just testing' something out --- the order is changed when you use the command!. Moreover, the order of other pointers to the data is also changed, unless they have a distinct memory location.
+
+The difference between `setorder` and `setorderv` is that the former uses non-standard evaluation and accepts unquoted variable names, while the latter accepts quoted variable names and is more useful when passing the column to order by as a function argument.
 
 ```{r}
 # mammals ordered by mass
@@ -160,16 +170,14 @@ data[mass_g > 1e7, c("binomial", "mass_g")]
 data[mass_g > 1e5 & iucn_status != "EP", c("binomial", "mass_g")]
 ```
 
-Are there any flying mammals that aren't bats?
+Here we determine that all flying mammals are indeed bats.
 
 ```{r no_bats}
 # flying mammals that are not bats
 data[aerial & order != "Chiroptera", ]
-
-# no :(
 ```
 
-Are humans included in the table?
+Further that humans are not included in the dataset.
 
 ```{r human_after_all}
 data[binomial == "Homo sapiens", ]
@@ -190,50 +198,6 @@ between(1:5, 2, 4)
 
 # fitler for mesofauna
 data[between(mass_g, 1e3, 1e5), c("binomial", "mass_g")]
-```
-
-## Making new variables
-
-### The internal assignment operator `:=`
-
-Very often in data analysis, you will want to create new variables, or edit
-existing ones. This is done easily through `:=`. This modified the data.table in place, making it more memory efficient.
-
-```{r}
-# pull the diet columns
-# see the regex chapter for how to work with regular expression
-diet_cols <- c(stringi::stri_subset(colnames(data), 
-                                    regex = "(diet)(?!.[method|source])"),
-               "binomial")
-
-data[, ..diet_cols]
-```
-
-These three variables show the percentage of each category of food that make the
-diet of that species. They should sum to 100, unless the authors made a typo or
-other entry error. To assert this, I'm going to create a new variable,
-`total_diet`.
-
-```{r total_diet}
-# make a copy so the original is not modified
-diet_data <- copy(data[, ..diet_cols])
-
-# get rowsums except for species name
-diet_data[, total_diet := 
-            rowSums(diet_data[, !"binomial"])]
-
-all(diet_data$total_diet == 100)
-# cool and good
-```
-
-If you want to keep only the new variable, you'll have to set the old variables to `NULL` after calculating the new variable.
-
-```{r diet_animal}
-# do operation
-diet_data[, diet_animal := diet_vertebrate + diet_invertebrate]
-
-# subset columns and save them to new object
-diet_data[, binomial, diet_animal]
 ```
 
 ### Summarising variables
@@ -272,7 +236,7 @@ data[, list(n_species = .N,
      by = list(mammal_order = order)]
 ```
 
-Observations can be grouped by multiple variables, which will output a summary for every unique combination of groups.
+Observations can be grouped by multiple variables, which will output a summary for every unique combination of grouping variables.
 
 ```{r multiple_groups}
 # group by order and family
@@ -282,7 +246,7 @@ data[, list(n_species = .N,
                mammal_family = family)]
 ```
 
-Operation chaining is easily done.
+Operation chaining is easily done, but never recommended. This may look complicated, and it is hard to follow for other users not familiar with the syntax.
 
 ```{r iucn_prop}
 # operation chaining is possible but not recommended
@@ -303,6 +267,7 @@ head(                                             # showing only the top rows
 ### Binding tables
 
 `data.table` provides the `rbindlist` function to bind data.tables row or column wise.
+Here, the echidna and porpoise data are extracted and bound together by row. The `rbindlist` function needs its output to be assigned, and does not modify in place. The names of the list elements being bound can be converted into a new column whose name is specified by `idcol`.
 
 ```{r id_bind}
 # get porpoises
@@ -315,12 +280,9 @@ rbindlist(l = list(porpoises = porpoises,
           idcol = "kind")
 ```
 
-### Combining variables of two tables with mutating joins
+### Merging data.tables
 
-Mutating joins are tailored to combine tables that share a set of observations
-but have different variables.
-
-In the example below, the data is split into habitat and diet data, recombined by species.
+Separate data.tables may contain variables which hold information about the same unique unit of observation, for example, a species. In the example below, the data is split into habitat and diet data, recombined by species. This can be merged into a single data.table using the `merge` function.
 
 ```{r split_phylacine}
 # get species and diet data
@@ -328,12 +290,9 @@ cols_wanted <- c("binomial",
                  stringi::stri_subset(colnames(data), regex = "(diet)(?!.[source|method])"))
 # get diet
 diet <- data[seq(5), ..cols_wanted]
-
-life_habit <- phylacine %>% select(binomial, terrestrial:aerial) %>%
-  slice(1:3, 6:7)
-life_habit
-
 ```
+
+![](wip.png)
 
 The two datasets each contain 5 species, the first three are shared, and the
 two last differ between the two.

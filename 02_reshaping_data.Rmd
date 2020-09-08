@@ -16,7 +16,13 @@ The equivalent chapter in the TRES Tidyverse Tutorial has some explanation of wh
 
 ## `data.table`: A `data.frame` extension
 
-The `data.table` is a development of the `data.frame`, which is faster and better in all possible ways. It does have some catches, which we'll deal with later.
+The `data.table` (from here on simply data.table) is a development of the `data.frame`, which is faster and better in two specific ways.
+
+1. Data.tables point to a memory location, so they don't deal with objects 'in memory'. This (usually) means no `R` crashes because you've run out of RAM.
+
+2. Data.tables allow _modifying by reference_, and adding new variables added to a data table in the form `dt$new_var <- c(...)` does not result in data copying, making the operation more memory efficient, and faster.
+
+### Creating a data.table
 
 ```{r}
 # Make a data frame
@@ -26,13 +32,7 @@ data.frame(who = c("Pratik", "Theo", "Raph"), chapt = c("1, 4", "3", "2, 5"))
 data.table(who = c("Pratik", "Theo", "Raph"), chapt = c("1, 4", "3", "2, 5"))
 ```
 
-The difference between `data.table` and `data.frame` is:
-
-1. data.tables are built to be fast, and are actually external pointers to the memory location of the data.
-2. data.tables follow _copy on write_, which means they are copied only when they are saved to another variable.
-3. This follows from, or leads to the fact that data.tables also follow _modify by reference_ which means that data.tables do not make a copy when making a new column, making them faster and more efficient.
-
-As a rule of thumb, try to convert your tables to tibbles whenever you can, especially when the original table is *not* a data frame. For example, the principal component analysis function `prcomp` outputs a `matrix` of coordinates in principal component-space.
+The conversion of statistical ouput to a data.table is as easy as using tibbles.
 
 ```{r}
 # Perform a PCA on mtcars
@@ -44,11 +44,27 @@ class(pca_scores) # but is actually a matrix
 as.data.table(pca_scores, keep.rownames = TRUE)
 ```
 
+The important thing to remember when using data.tables is that you need to keep track of which objects are data.tables, and which are data.frames. The two can be interconverted using the _modify in place_ functions `setDT` to convert from data.frame to data.table, and `setDF` for the opposite conversion.
+
+### Modifying in place
+
+Many `data.table` functions modify in place, as with `setDT` above. These change something about the `data.table` without the need for an assignment operator, and can be identified using the `set*` prefix. More examples will be encountered later.
+
+### All-in-one functionality
+
+Data.tables and `data.table` (the package) roll a great deal of the tidyverse's functionality into a single package. Specifically, `data.table` contains its own implementations of most aspects of `tibble`, `dplyr`, and `tidyr`. If you use the pipe operator `%>%` from the `magrittr` package, this can also be replaced in operation chaining exercises by `data.table`'s inbuilt chaining functionality.
+
+### What cannot be replaced {-}
+
+`data.table` has its own internal logic, which has a bit of a learning curve, but not more so than the more complex parts of the tidyverse. Some operations from `tidyr` such as `unnest` are truly difficult to reproduce succinctly using only base R and `data.table`. Yet, they can be replicated with some work. It is up to the user to determine whether one less dependency balances the need for relatively complex code.
+
 This is important because a `matrix` can contain only one type of values (e.g. only `numeric` or `character`), while `data.tables` (and `data.frame`) allow you to have columns of different types.
 
-## The concept of tidy data
+## Wide to long conversion
 
-Say we have a dataset of several morphometrics measured on Darwin's finches in the Galapagos islands. Let's first get this dataset.
+Converting data.tables from wide to long format (we shall eschew 'tidy' and 'messy') is done using the `melt` function. Once upon a time, the `reshape` and `reshape2` packages provided this function, and may still do so. `data.table` provides its own implementation.
+
+Here we _melt_ the finch morphometry data simulated in the tidyverse tutorial from wide to long.
 
 ```{r}
 # We first simulate random data
@@ -57,7 +73,7 @@ beak_widths <- rnorm(100, mean = 2, sd = 0.1)
 body_weights <- rgamma(100, shape = 10, rate = 1)
 islands <- rep(c("Isabela", "Santa Cruz"), each = 50)
 
-# Assemble into a tibble
+# Assemble into a data.table
 data <- data.table(
   id = 1:100,
   body_weight = body_weights,
@@ -70,7 +86,7 @@ data <- data.table(
 data
 ```
 
-This is converted to long format using `melt`.
+This is converted to long format using `melt`, with the _identity_ variables being set as individual id (`id`) and island name (`island`).
 
 ```{r}
 data <- melt(
@@ -81,7 +97,9 @@ data <- melt(
 data
 ```
 
-A common example of wide-or-long dilemma is when dealing with *contingency tables*. This would be our case, for example, if we asked how many observations we have for each morphometric and each island. We use `table` (from base R) to get the answer.
+### Tables: Wide to long
+
+Contingency tables (e.g. how many observations we have for each morphometric and each island) are also easy to handle. First, `table` (from base R) provides the initial table, which is in wide format.
 
 ```{r}
 # Make a contingency table
@@ -96,21 +114,28 @@ ctg
 as.data.table(ctg)
 ```
 
-### Pivoting long to wide
+### Long to wide conversion
 
-Data can be 'cast' from wide to long. 
-FYI: The analogy is from working with metals, which are melted, and then cast.
+Data may be required in wide format from time to time. Again, this used to be the _forte_ of the `reshape*` packages, and `data.table` provides its own implementation of the `dcast` function, with which data can be 'cast' from wide to long.
 
-`data.table`'s `dcast` takes a `data.table` or `data.frame`, and a formula where the left hand side is made up of the id variables, while the right hand side is the measure variables. The value variable can be specified using `value.var`.
+FYI: The analogy is from working with metals, which are melted from billets, and then cast into shape.
+
+`dcast` works a bit differently from other functions, and takes
+
+- a `data.table` or `data.frame`,  
+- a formula where the left hand side is made up of the id variables, while the right hand side is the measure variables, and 
+- the value variable specified using `value.var`.
+
+In the example, we recover the original wide data that we simulated and then melted wide to long.
 
 ```{r}
 dcast(data,
       id + island ~ variable, value.var = "value")
 ```
 
-### Pivoting with aggregation
+### Long to wide conversion with aggregation
 
-`data.table` `dcast` also allows aggregation when there is more than one value per combination of LHS and RHS. In fact, a list of aggregation functions can be specified. Here we pass a list containing `mean` and `sd` functions.
+`dcast` also allows aggregation when there is more than one value per combination of LHS and RHS. In fact, a list of aggregation functions can be specified. Here we pass a list containing `mean` and `sd` functions to obtain the mean and standard deviation of each morphometric measure per island.
 
 ```{r}
 dcast(data,
@@ -118,11 +143,11 @@ dcast(data,
       fun.aggregate = list(mean, sd))
 ```
 
-There are a few other reshaping operations from `tidyr` that are worth knowing.
-
 ### Handling missing values
 
-Say we have some missing measurements in the column "value" of our finch dataset:
+Missing values can be omitted or replaced using `data.table` implementations of `na.omit` and specific replacement functions.
+
+In the example, we first add some `NA`s.
 
 ```{r}
 # We replace 100 random observations by NAs
@@ -137,7 +162,8 @@ Remove rows that have missing values using `na.omit`.
 na.omit(data, "value")
 ```
 
-Else, we could replace the NAs with some user-defined value.
+The `NA`s can also be replaced with some user-defined value using the function `setnafill`.
+`setnafill` modifies in place.
 
 ```{r}
 setnafill(data, 
@@ -145,7 +171,7 @@ setnafill(data,
        type = "const", fill = -999)
 ```
 
-Here we encounter `data.table`'s _modify in place_ functionality. Functions starting with `set*` modify the relevant columns in place. In the example above, the `value` column has had `NA`s replaced with `-999` *without being assigned* using the assignment operator.
+Reminder: Functions starting with `set*` modify the relevant columns in place. In the example above, the `value` column has had `NA`s replaced with `-999` *without being assigned* using the assignment operator.
 
 We could also replace NAs with the most recent non-NA values.
 
@@ -163,11 +189,26 @@ setnafill(data,
 data
 ```
 
-### Splitting and combining cells
+### Assignment in a data table {-}
 
-The `tidyr` package offers tools to split and combine columns. This is a nice extension to the string manipulations we saw last week in the `stringr` tutorial.
+Assigning a column in a `data.table` can also be done in place, using the `:=` operator in combination with square brackets `[]` and a comma `,`.
 
-Say we want to add the specific dates when we took measurements on our birds (we would normally do this using `dplyr` but for now we will stick to the old way):
+A pseudo-code explanation is:
+
+`DT[, new_column := function(old_column <OR> other)]`
+
+For example, `NA`'s can be replaced in a data.table using the `:=` operator and the `nafill` function.
+`nafill` is another form of `setnafill` that returns a filled vector, rather than filling `NA`s a data.table in place.
+
+```{r}
+data[, value := nafill(value, "locf")]
+```
+
+### Splitting and combining columns
+
+`data.table` does not provide a function similar to `tidyr`'s `unite`. This is an operation that can nonetheless be readily replicated using existing data.table functionality and base R functions.
+
+In the example, we make new columns for the date of each observation.
 
 ```{r}
 # Sample random dates for each observation
@@ -177,16 +218,7 @@ data$year <- sample(2019:2020, nrow(data), replace = TRUE)
 data
 ```
 
-We could combine the `day`, `month` and `year` columns into a single `date` column, with a dash as a separator, using `base::paste` or `base::sprintf`.
-
-### Assignment in a data table {-}
-
-Here is a first example of assigning a column in a `data.table`.
-We use the `:=` operator in combination with square brackets `[]` and a `,`.
-
-A pseudo-code explanation is:
-
-`DT[, new_column := function(old_column <OR> other)]`
+The `day`, `month` and `year` columns can be combined into a single `date` column, with a dash as a separator, using `base::paste` or `base::sprintf`.
 
 ```{r}
 # using paste
@@ -196,20 +228,42 @@ data[, date := paste(day, month, year, sep = "-")]
 data[, data_sprintf := sprintf("%i-%i-%i", day, month, year)]
 ```
 
-Splitting a column is a equally easy using the `data.table::tstrsplit` function, which transposes the results of `strsplit`.
+Splitting a column is a equally easy using the `data.table::tstrsplit` function, which transposes the results of `strsplit`. `strsplit` from base R is a function that splits a string on a pattern, in the following case on the dash `-`. `tstrsplit` takes these pieces and converts them into list-like objects, which can be assigned to a data.table's columns.
 
 ```{r}
-# using stringi::stri_split
+# using tstrsplit
 data[, c("day_new", "month_new", "year_new") := tstrsplit(date, split = "-")]
 ```
 
 Note the type conversion here.
 
+### Assigning multiple variables at once
+
+Note also how more than one variable can be assigned at once in the example above.
+That is only one way of doing it, and two others must be mentioned.
+
+#### Assigning the same value to two variables
+
+Two variables can be assigned the same value at once. Here, both new variables have the same value drawn from a uniform distribution.
+
+```{r}
+data[, c("new_var_1", "new_var_2") := stats::runif(nrow(data))]
+```
+
+Two variables can also be assigned distinct values, here again randomly drawn.
+
+```{r}
+data[, `:=`(new_var_3 = stats::runif(nrow(data)),
+            new_var_4 = stats::runif(nrow(data)))]
+```
+
+In this case, the `:=` operator is wrapped in backticks, and the new variables are assigned inside round brackets.
+
 ### Expanding tables using combinations
 
-Instead of getting rid of rows with NAs, we may want to add rows with NAs, for example, for combinations of parameters that we did not measure.
+Generating a data.table with all possible combinations of two or more vectors is very easy using the `CJ` command (for cross-join).
 
-We could generate a tibble with all combinations of island, morphometric and year using `CJ`:
+In the example all combinations of island and year are returned.
 
 ```{r}
 CJ(
@@ -218,7 +272,7 @@ CJ(
 )
 ```
 
-As you can see, we get all the combinations of the variables of interest, even those that are missing. But sometimes you might be interested in variables that are *nested* within each other and not *crossed*. For example, say we have measured birds at different locations within each island.
+However, in the sampling scheme of the example, some `sites` occur only on one island and not on the other.
 
 ```{r}
 # assign sites A and B to Isabella
@@ -232,178 +286,21 @@ data[, site := unlist(lapply(data$island,
                       )]
 ```
 
-Of course, if sites A and B are on Isabela, they cannot be on Santa Cruz, where we have sites C and D instead. We can figure out which combinations exist in the data using the `duplicated` function.
+It is now necessary to nest site within island when crossing all variables. This is achieved in `tidyr` using the function `nesting`, but there is no equivalent in `data.table`. Yet, there is a solution: it is possible to figure out which combinations exist in the data using the `duplicated` function.
 
 `duplicated` returns a `logical` vector, which can be used to filter the data.table.
 
 ```{r}
+# get a logical vector
+!duplicated(dt_new[, .(island, site, year)
+
+# use it to filter the data.table
 dt_new[!duplicated(dt_new[, .(island, site, year)]), # check for dups
        .(island, site, year)] # select column in the data.table
 ```
 
-### Nesting or list columns
+### Making list columns
 
 `data.table` supports nested list columns, where the contents of a cell are not atomic (integers, numerics, characters etc.), but more complex objects such as vectors or data.tables themselves.
 
-## Extra: Dealing with factors
-
-```{r}
-library(forcats)
-```
-
-Categorical variables can be stored in R as character strings in `character` or `factor` objects. A `factor` looks like a `character`, but it actually is an `integer` vector, where each `integer` is mapped to a `character` label. With this respect it is sort of an enhanced version of `character`. For example,
-
-```{r}
-my_char_vec <- c("Pratik", "Theo", "Raph")
-my_char_vec
-```
-
-is a `character` vector, recognizable to its double quotes, while
-
-```{r}
-my_fact_vec <- factor(my_char_vec) # as.factor would work too
-my_fact_vec
-```
-
-is a `factor`, of which the *labels* are displayed. The *levels* of the factor are the unique values that appear in the vector. If I added an extra occurrence of my name:
-
-```{r}
-factor(c(my_char_vec, "Raph"))
-```
-
-we would still have the the same levels. Note that the levels are returned as a `character` vector in alphabetical order by the `levels` function:
-
-```{r}
-levels(my_fact_vec)
-```
-
 ![](wip.png)
-
-~~Why does it matter? Well, most operations on categorical variables can be performed on `character` of `factor` objects, so it does not matter so much which one you use for your own data. However, some functions in R require you to provide categorical variables in one specific format, and others may even implicitely convert your variables. In `ggplot2` for example, character vectors are converted into factors by default. So, it is always good to remember the differences and what type your variables are.
-
-But this is a tidyverse tutorial, so I would like to introduce here the package `forcats`, which offers tools to manipulate factors. First of all, most tools from `stringr` *will work* on factors. The `forcats` functions expand the string manipulation toolbox with factor-specific utilities. Similar in philosophy to `stringr` where functions started with `str_`, in `forcats` most functions start with `fct_`.
-
-I see two main ways `forcats` can come handy in the kind of data most people deal with: playing with the order of the levels of a factor and playing with the levels themselves. We will show here a few examples, but the full breadth of factor manipulations can be found online or in the excellent `forcats` cheatsheet.~~
-
-### Change the order of the levels
-
-One example use-case where you would want to change the order of the levels of a factor is when plotting. Your categorical variable, for example, may not be plotted in the order you want. If we plot the distribution of each variable across islands, we get
-
-```{r}
-# Make the plotting code a function so we can re-use it without copying and pasting
-my_plot <- function(data) {
-
-  # We do not cover the ggplot functions in this chapter, this is just to
-  # illustrate our use-case, wait until chapter 5!
-  library(ggplot2)
-  ggplot(data, aes(x = island, y = value, color = island)) +
-    geom_violin() +
-    geom_jitter(width = 0.1) +
-    facet_grid(variable ~ year, scales = "free") +
-    theme_bw() +
-    scale_color_manual(values = c("forestgreen", "goldenrod"))
-
-}
-
-my_plot(data)
-# Remember that data are missing from Santa Cruz in 2020
-```
-
-Here, the islands (horizontal axis) and the variables (the facets) are displayed in alphabetical order. When making a figure you may want to customize these orders in such a way that your message is optimally conveyed by your figure, and this may involve playing with the order of levels.
-
-Simply use `factor` with the `levels = (...)` argument to set the factor levels as required.
-
-```{r}
-data$island <- as.factor(data$island) # turn this column into a factor
-data$island <- factor(data$island, levels = c("Santa Cruz", "Isabela"))
-my_plot(data) # order of islands has changed!
-```
-
-Beware that reordering a factor *does not change* the order of the items within the vector, only the order of the *levels*. So, it does not introduce any mistmatch between the `island` column and the other columns! It only matters when the levels are called, for example, in a `ggplot`.
-
-```{r}
-data$island[1:10]
-factor(data$island, levels = c("Isabela", "Santa Cruz"))[1:10] # same thing, different levels
-```
-
-When converting a column to a factor, the levels are set _by default_ in the order in which they appear. The example below shows this in the ordering of the `beak_*` metrics, where the order is of appearance, and not alphabetical.
-
-```{r}
-data$variable <- as.factor(data$variable)
-levels(data$variable)
-levels(fct_inorder(data$variable))
-```
-
-or `fct_rev` to reverse the order of the levels:
-
-```{r}
-levels(data$island)
-# now in reversed order
-levels(factor(data$island, 
-              levels = rev(levels(data$island)))) 
-```
-
-![](wip.png)
-
-~~Other variants exist to do more complex reordering, all present in the forcats  [cheatsheet](https://rstudio.com/resources/cheatsheets/), for example:
-* `fct_infreq` to re-order according to the frequency of each level (how many observation on each island?)
-* `fct_shift` to shift the order of all levels by a certain rank (in a circular way so that the last one becomes the first one or vice versa)
-* `fct_shuffle` if you want your levels in random order
-* `fct_reorder`, which reorders based on an associated variable (see `fct_reorder2` for even more complex relationship between the factor and the associated variable)~~
-
-### Modifying factor levels
-
-~~Changing the levels of a factor will change the labels in the actual vector. It is similar to performing a string substitution in `stringr`. One can change the levels of a factor using `fct_recode`:
-
-```{r}
-fct_recode(
-  my_fact_vec,
-  "Pratik Gupte" = "Pratik",
-  "Theo Pannetier" = "Theo",
-  "Raphael Scherrer" = "Raph"
-)
-```
-
-or collapse factor levels together using `fct_collapse`:
-
-```{r}
-fct_collapse(my_fact_vec, EU = c("Theo", "Raph"), NonEU = "Pratik")
-```
-
-Again, we do not provide an exhaustive list of `forcats` functions here but the most usual ones, to give a glimpse of many things that one can do with factors. So, if you are dealing with factors, remember that `forcats` may have handy tools for you. Among others:
-* `fct_anon` to "anonymize", i.e. replace the levels by random integers
-* `fct_lump` to collapse levels together based on their frequency (e.g. the two most frequent levels together)~~
-
-### Dropping levels
-
-If you use factors in your tibble and get rid of one level, for any reason, the factor will usually remember the old levels, which may cause some problems when applying functions to your data.
-
-```{r}
-data <- data[data$island == "Santa Cruz",] # keep only one island
-unique(data$island) # Isabela is gone from the labels
-levels(data$island) # but not from the levels
-```
-
-Use `droplevels` (from base R) to make sure you get rid of levels that are not in your data anymore:
-
-```{r}
-data <- droplevels(data)
-levels(data$island)
-```
-
-Fortunately, most functions within the tidyverse will not complain about missing levels, and will automatically get rid of those inexistant levels for you. But because factors are such common causes of bugs, keep this in mind!
-
-Note that this is equivalent to doing:
-
-```{r}
-data$island <- fct_drop(data$island)
-```
-
-## External resources
-
-~~Find lots of additional info by looking up the following links:
-
-* The `readr`/`tibble`/`tidyr` and `forcats` [cheatsheets](https://rstudio.com/resources/cheatsheets/).
-* This [link](https://tidyr.tidyverse.org/articles/tidy-data.html) on the concept of tidy data
-* The [tibble](https://tibble.tidyverse.org/), [tidyr](https://tidyr.tidyverse.org/) and [forcats](https://forcats.tidyverse.org/) websites
-* The [broom](https://broom.tidymodels.org/), [tidymodels](https://www.tidymodels.org/), [tidygraph](https://www.data-imaginist.com/2017/introducing-tidygraph/) and [tidytree](https://yulab-smu.github.io/treedata-book/) websites~~

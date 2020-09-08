@@ -3,7 +3,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-# Reading files and string manipulation
+# Reading files, string manipulation, and factors
 
 Instead of using `stringr`, we will use the `stringi` package on which it is based, and read files using the `data.table` package. 
 We will use `paste` and `sprintf` from base `R` to handle string interpolation.
@@ -420,6 +420,8 @@ stri_pad(str = c("1", "10", "100"),
 
 The idea behind string interpolation is to procedurally generate new complex strings from pre-existing data.
 
+### NEEDS TO GO {-}
+
 ```{r}
 # print that each car name is a car model
 cars = rownames(head(mtcars))
@@ -448,3 +450,105 @@ glue_data(parameter_combinations,
 Finally, the convenient `glue_sql` and `glue_data_sql` are used to safely write SQL queries where variables from data are appropriately quoted. This is not covered here, but it is good to know it exists.
 
 `glue` has some more functions --- `glue_safe`, `glue_collapse`, and `glue_col`, but these are infrequently used. Their functionality can be found on the `glue` github page.
+---
+
+## Dealing with factors
+
+```{r}
+library(forcats)
+```
+
+Categorical variables can be stored in R as character strings in `character` or `factor` objects. A `factor` looks like a `character`, but it actually is an `integer` vector, where each `integer` is mapped to a `character` label. With this respect it is sort of an enhanced version of `character`. For example,
+
+```{r}
+my_char_vec <- c("Pratik", "Theo", "Raph")
+my_char_vec
+```
+
+is a `character` vector, recognizable to its double quotes, while
+
+```{r}
+my_fact_vec <- factor(my_char_vec) # as.factor would work too
+my_fact_vec
+```
+
+is a `factor`, of which the *labels* are displayed. The *levels* of the factor are the unique values that appear in the vector. If I added an extra occurrence of my name:
+
+```{r}
+factor(c(my_char_vec, "Raph"))
+```
+
+we would still have the the same levels. Note that the levels are returned as a `character` vector in alphabetical order by the `levels` function:
+
+```{r}
+levels(my_fact_vec)
+```
+
+### Change the order of the levels
+
+One example use-case where you would want to change the order of the levels of a factor is when plotting. Your categorical variable, for example, may not be plotted in the order you want. If we plot the distribution of each variable across islands, we get
+
+```{r}
+# Make the plotting code a function so we can re-use it without copying and pasting
+my_plot <- function(data) {
+
+  # We do not cover the ggplot functions in this chapter, this is just to
+  # illustrate our use-case, wait until chapter 5!
+  library(ggplot2)
+  ggplot(data, aes(x = island, y = value, color = island)) +
+    geom_violin() +
+    geom_jitter(width = 0.1) +
+    facet_grid(variable ~ year, scales = "free") +
+    theme_bw() +
+    scale_color_manual(values = c("forestgreen", "goldenrod"))
+
+}
+
+my_plot(data)
+# Remember that data are missing from Santa Cruz in 2020
+```
+
+Here, the islands (horizontal axis) and the variables (the facets) are displayed in alphabetical order. When making a figure you may want to customize these orders in such a way that your message is optimally conveyed by your figure, and this may involve playing with the order of levels.
+
+Simply use `factor` with the `levels = (...)` argument to set the factor levels as required.
+
+```{r}
+data$island <- as.factor(data$island) # turn this column into a factor
+data$island <- factor(data$island, levels = c("Santa Cruz", "Isabela"))
+my_plot(data) # order of islands has changed!
+```
+
+Beware that reordering a factor *does not change* the order of the items within the vector, only the order of the *levels*. So, it does not introduce any mistmatch between the `island` column and the other columns! It only matters when the levels are called, for example, in a `ggplot`.
+
+```{r}
+data$island[1:10]
+factor(data$island, levels = c("Isabela", "Santa Cruz"))[1:10] # same thing, different levels
+```
+
+When converting a column to a factor, the levels are set _by default_ in the order in which they appear. The example below shows this in the ordering of the `beak_*` metrics, where the order is of appearance, and not alphabetical.
+
+Factors can be placed in reverse order as well.
+
+```{r}
+levels(data$island)
+# now in reversed order
+levels(factor(data$island, 
+              levels = rev(levels(data$island)))) 
+```
+
+### Dropping levels
+
+Factor columns store both the actual values as well as the set of possible values, so dropping a level from a factor column is not as easy as excluding rows with factor values one does not want.
+
+```{r}
+data <- data[data$island == "Santa Cruz",] # keep only one island
+unique(data$island) # Isabela is gone from the labels
+levels(data$island) # but not from the levels
+```
+
+Use `droplevels` (from base R) to make sure you get rid of levels that are not in your data anymore:
+
+```{r}
+data <- droplevels(data)
+levels(data$island)
+```
