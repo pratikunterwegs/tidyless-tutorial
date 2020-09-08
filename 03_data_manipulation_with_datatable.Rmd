@@ -65,8 +65,9 @@ head(
 )
 
 # returns a vector
-data$binomial
-
+head(
+  data$binomial
+)
 # returns a vector
 head(
   setDF(data)[, "binomial"] # note the changed class
@@ -114,7 +115,7 @@ Multiple variables can be removed using the general form of assigning variables.
 The example below shows how, but is not run.
 
 ```{r eval=FALSE}
-data[, `:=(order = NULL, family = NULL)]
+data[, `:=` (order = NULL, family = NULL)]
 ```
 
 ### Select variables by pattern
@@ -241,7 +242,7 @@ Observations can be grouped by multiple variables, which will output a summary f
 ```{r multiple_groups}
 # group by order and family
 data[, list(n_species = .N,
-         mean_mass_g = mean(mass_g)),
+            mean_mass_g = mean(mass_g)),
      by = list(mammal_order = order,
                mammal_family = family)]
 ```
@@ -282,7 +283,7 @@ rbindlist(l = list(porpoises = porpoises,
 
 ### Merging data.tables
 
-Separate data.tables may contain variables which hold information about the same unique unit of observation, for example, a species. In the example below, the data is split into habitat and diet data, recombined by species. This can be merged into a single data.table using the `merge` function.
+Separate data.tables may contain variables which hold information about the same unique unit of observation, for example, a species. In the example below, the data is split into habitat and diet data, recombined by species. This can be merged into a single data.table using the `merge` function. `merge` will attempt to look for common columns between the input data.tables, but these can also be specified manually.
 
 ```{r split_phylacine}
 # get species and diet data
@@ -290,47 +291,67 @@ cols_wanted <- c("binomial",
                  stringi::stri_subset(colnames(data), regex = "(diet)(?!.[source|method])"))
 # get diet
 diet <- data[seq(5), ..cols_wanted]
-```
 
-![](wip.png)
+# get family and species
+family <- data[seq(3, 8), c("binomial", "family")]
+```
 
 The two datasets each contain 5 species, the first three are shared, and the
 two last differ between the two.
 
 ```{r intersect}
-intersect(diet$binomial, life_habit$binomial)
-setdiff(diet$binomial, life_habit$binomial)
+intersect(diet$binomial, family$binomial)
+setdiff(diet$binomial, family$binomial)
 ```
 
-To use mutate-joins, both tables need to have a **key**, a variable that
-identifies each observation. Here, that would be `binomial`, the sepcies names.
-If your table doesn't have such a key and the rows between the tables match
-one another, remember you can create a row number variable easily with
-`tibble::column_to_rownames()`.
+The default merge is an inner join, i.e, only rows in `x` with matching values in the key (i.e, common) columns in `y` are retained.
 
 ```{r inner_join}
-inner_join(diet, life_habit, by = "binomial")
+merge.data.table(x = diet, y = family)
 ```
 
-`inner_join` combined the variables, and dropped the observations that weren't
-matched between the two tables. There are three other variations of mutating
-joins, differing in what they do with unmatching variables.
+The columns on which to join can be specified manually as `by`.
 
-```{r outer_joins}
-left_join(diet, life_habit, by = "binomial")
-right_join(diet, life_habit, by = "binomial")
-full_join(diet, life_habit, by = "binomial")
-
-semi_join(diet, life_habit, by  = "binomial")
-anti_join(diet, life_habit, by  = "binomial")
+```{r}
+merge.data.table(x = diet, y = family, by = "binomial")
 ```
 
-### Filtering matching observations between two tables wiht filtering joins
+A left join (all rows in `x` are kept) can be done setting `all.x = TRUE`. Note the missing `family` for the first two observations.
 
-So-called filtering joins return row from the first table that are matched
-(or not, for `anti_join()`) in the second.
+```{r}
+merge.data.table(diet, family, all.x = TRUE)
+```
 
-```{r filter_joins}
-semi_join(diet, life_habit, by  = "binomial")
-anti_join(diet, life_habit, by  = "binomial")
+A right join (all rows in `y`) and a full join (all rows in `x` and `y`) are also intuitive.
+
+```{r}
+# a right join sets all.y = TRUE
+merge.data.table(diet, family, all.y = TRUE)
+
+# a full join sets all.x and all.y to TRUE
+# all = TRUE is a shorter form for that
+merge.data.table(diet, family, all = TRUE)
+```
+
+An anti join can be achieved using the chained join, but negating `y` using the `!` operator.
+The general form is `x[!y, on = "key_variable]`.
+
+```{r}
+# use the negate sign !
+diet[!family, on = "binomial"]
+```
+
+This syntax is different from those seen before using `merge`, and is a more compact form of `merge`, that can also be used for other joins. The kind of join is determined by which data.table is considered `x` and which `y`.
+
+```{r}
+# right join using compact form
+diet[family, on = "binomial"]
+
+# left join
+family[diet, on = "binomial"]
+
+# inner join requires an na.omit
+na.omit(
+  family[diet, on = "binomial"]
+)
 ```
